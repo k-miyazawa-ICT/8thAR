@@ -101,6 +101,10 @@ const onXrLoaded = () => {
         gltf => {
           model = gltf.scene
           model.visible = false
+          const box = new THREE.Box3().setFromObject(model)
+          const size = new THREE.Vector3()
+          box.getSize(size)
+          log('モデルサイズ:', size.x, size.y, size.z)
           threeScene.add(model)
           log('モデル読み込み完了')
         },
