@@ -22,7 +22,20 @@
       z-index: 999;
       pointer-events: none;
       white-space: nowrap;
-      transition: opacity 0.5s;
+    }
+    #log {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      max-height: 40vh;
+      overflow-y: auto;
+      background: rgba(0,0,0,0.75);
+      color: #0f0;
+      font-family: monospace;
+      font-size: 11px;
+      padding: 8px;
+      z-index: 999;
     }
   </style>
 </head>
@@ -30,13 +43,10 @@
 
 <div id="status">読み込み中...</div>
 <canvas id="camerafeed"></canvas>
+<div id="log"></div>
 
-<!-- Three.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<!-- GLTFLoader -->
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-
-<!-- 8th Wall エンジン -->
 <script
   src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js"
   crossorigin="anonymous"
@@ -45,19 +55,34 @@
 
 <script>
 const status = document.getElementById('status')
+const logEl  = document.getElementById('log')
 const canvas = document.getElementById('camerafeed')
+
+// 画面上にログ表示
+const log = (...args) => {
+  const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')
+  console.log(msg)
+  const line = document.createElement('div')
+  line.textContent = new Date().toLocaleTimeString() + ' ' + msg
+  logEl.appendChild(line)
+  logEl.scrollTop = logEl.scrollHeight
+}
+
 let model = null
 let anchored = false
 let threeScene, threeCamera, threeRenderer
 
 const onXrLoaded = () => {
+  log('XR8読み込み完了')
+
   fetch('./targets/frame.json')
     .then(r => {
+      log('frame.json status:', r.status)
       if (!r.ok) throw new Error('HTTP ' + r.status)
       return r.json()
     })
     .then(targetData => {
-      status.textContent = 'カメラを起動中...'
+      log('frame.json読み込み成功 name:', targetData.name)
 
       threeScene    = new THREE.Scene()
       threeCamera   = new THREE.PerspectiveCamera()
@@ -66,28 +91,29 @@ const onXrLoaded = () => {
       threeRenderer.setSize(window.innerWidth, window.innerHeight)
       threeRenderer.autoClear = false
 
-      // ライト
       threeScene.add(new THREE.AmbientLight(0xffffff, 1.5))
       const dir = new THREE.DirectionalLight(0xffffff, 1)
       dir.position.set(1, 2, 1)
       threeScene.add(dir)
 
-      // GLTFモデル読み込み
       const loader = new THREE.GLTFLoader()
       loader.load('./targets/model.glb',
         gltf => {
           model = gltf.scene
           model.visible = false
           threeScene.add(model)
-          console.log('モデル読み込み完了')
+          log('モデル読み込み完了')
         },
         undefined,
-        e => console.error('モデル読み込み失敗', e)
+        e => log('モデル読み込み失敗:', e.message)
       )
 
-      // 8th Wall パイプラインモジュール
       const myModule = {
         name: 'myARModule',
+        onStart: () => {
+          log('ARエンジン開始')
+          status.textContent = 'マーカーをカメラに向けてください'
+        },
         onUpdate: ({ processCpuResult }) => {
           const reality = processCpuResult.reality
           if (!reality) return
@@ -104,16 +130,16 @@ const onXrLoaded = () => {
           threeRenderer.render(threeScene, threeCamera)
         },
         listeners: [
-          { event: 'reality.imagefound',   process: ({ detail }) => onImageEvent(detail) },
+          { event: 'reality.imagefound',   process: ({ detail }) => { log('マーカー発見!', detail.name); onImageEvent(detail) } },
           { event: 'reality.imageupdated', process: ({ detail }) => onImageEvent(detail) },
-          { event: 'reality.imagelost',    process: () => onImageLost() },
+          { event: 'reality.imagelost',    process: () => { log('マーカー消失'); onImageLost() } },
         ],
       }
 
-      XR8.XrController.configure({
-        imageTargetData: [targetData],
-      })
+      log('XrController設定中...')
+      XR8.XrController.configure({ imageTargetData: [targetData] })
 
+      log('パイプライン追加中...')
       XR8.addCameraPipelineModules([
         XR8.GlTextureRenderer.pipelineModule(),
         XR8.Threejs.pipelineModule(),
@@ -121,13 +147,11 @@ const onXrLoaded = () => {
         myModule,
       ])
 
-      XR8.run({
-        canvas,
-        allowedDevices: XR8.XrConfig.device().ANY,
-      })
+      log('XR8.run開始...')
+      XR8.run({ canvas, allowedDevices: XR8.XrConfig.device().ANY })
     })
     .catch(e => {
-      console.error('frame.json 読み込み失敗:', e)
+      log('エラー:', e.message)
       status.textContent = 'エラー: ' + e.message
     })
 }
@@ -139,17 +163,16 @@ const onImageEvent = (detail) => {
   const s = detail.scale * 0.1
   model.scale.set(s, s, s)
   model.visible = true
-
   if (!anchored) {
     anchored = true
-    status.textContent = '3D固定しました（マーカーを外してもOK）'
+    status.textContent = '3D固定しました！'
     setTimeout(() => { status.style.opacity = '0' }, 3000)
   }
 }
 
 const onImageLost = () => {
   if (anchored) {
-    status.textContent = 'マーカーなしで空間に固定中'
+    status.textContent = 'マーカーなしで固定中'
     status.style.opacity = '1'
     setTimeout(() => { status.style.opacity = '0' }, 2000)
   }
