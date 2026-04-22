@@ -101,6 +101,7 @@ const onXrLoaded = () => {
         gltf => {
           model = gltf.scene
           model.visible = false
+          model.scale.set(0.001,0.001,0.001)
           threeScene.add(model)
           log('モデル読み込み完了')
         },
@@ -160,8 +161,6 @@ const onImageEvent = (detail) => {
   if (!model) return
   model.position.copy(detail.position)
   model.quaternion.copy(detail.rotation)
-  const s = detail.scale * 0.1
-  model.scale.set(s, s, s)
   model.visible = true
   if (!anchored) {
     anchored = true
