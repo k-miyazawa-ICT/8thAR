@@ -63,7 +63,7 @@
 
 <a-scene
   xrconfig
-  xrweb="enableWorldTracking: true; imageTargets: true"
+  xrweb="enableWorldTracking: true; imageTargets: targets/frame.json"
   renderer="colorManagement: true"
   vr-mode-ui="enabled: false"
   loading-screen="enabled: false"
@@ -74,7 +74,7 @@
       イメージターゲットの定義
       name は image-target-cli で生成した .xtarget のファイル名（拡張子なし）に合わせる
     -->
-    <xrextras-named-image-target name="my-target"></xrextras-named-image-target>
+    <xrextras-named-image-target name="frame"></xrextras-named-image-target>
   </a-assets>
 
   <!-- カメラ -->
@@ -84,34 +84,14 @@
     look-controls="enabled: false"
   ></a-camera>
 
-  <!--
-    3Dモデルを置くエンティティ
-    ar-anchor コンポーネントが以下を担当：
-      - xrimagefound : マーカー検出 → SLAMで空間にアンカー登録・表示
-      - xrimageupdated: マーカー追跡中 → 位置を更新
-      - xrimagelost  : マーカー消失 → SLAMが位置を維持・表示し続ける
-  -->
-  <a-entity id="ar-object" ar-anchor="targetName: my-target" visible="false">
+  <a-entity id="ar-object" ar-anchor="targetName: frame" visible="false">
 
-    <!-- ここに3Dモデルを入れる。今はサンプルとして箱 -->
-    <a-box
-      position="0 0.1 0"
-      rotation="0 45 0"
-      width="0.15"
-      height="0.15"
-      depth="0.15"
-      color="#4CC3D9"
-      shadow
-    ></a-box>
-
-    <!-- モデルを使う場合はこちら（.glb/.gltf ファイルを置いてコメント解除）-->
-    <!--
+    <!-- model.glb を表示 -->
     <a-gltf-model
-      src="./models/your-model.glb"
+      src="./targets/model.glb"
       position="0 0 0"
       scale="0.1 0.1 0.1"
     ></a-gltf-model>
-    -->
 
   </a-entity>
 
