@@ -101,7 +101,6 @@ const onXrLoaded = () => {
         gltf => {
           model = gltf.scene
           model.visible = false
-          model.scale.set(0.001,0.001,0.001)
           threeScene.add(model)
           log('モデル読み込み完了')
         },
