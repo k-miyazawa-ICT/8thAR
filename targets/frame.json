@@ -1,0 +1,23 @@
+{
+  "imagePath": "image-targets/frame_luminance.png",
+  "metadata": null,
+  "name": "frame",
+  "type": "PLANAR",
+  "properties": {
+    "left": 80,
+    "top": 0,
+    "width": 480,
+    "height": 640,
+    "isRotated": true,
+    "originalWidth": 640,
+    "originalHeight": 640
+  },
+  "resources": {
+    "originalImage": "frame_original.png",
+    "croppedImage": "frame_cropped.png",
+    "thumbnailImage": "frame_thumbnail.png",
+    "luminanceImage": "frame_luminance.png"
+  },
+  "created": 1776825239198,
+  "updated": 1776825239198
+}
