@@ -4,20 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AR マーカー 3D モデル</title>
-
-  <!-- A-Frame を先に読み込む（8th Wallより先が必須） -->
-  <script src="https://cdn.jsdelivr.net/npm/aframe@1.4.2/dist/aframe.min.js"></script>
-
-  <!-- 8th Wall エンジン（A-Frameの後に読み込む） -->
-  <script
-    src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js"
-    crossorigin="anonymous"
-    data-preload-chunks="slam">
-  </script>
-
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { overflow: hidden; }
+    body { overflow: hidden; background: #000; }
+    #camerafeed { width: 100vw; height: 100vh; display: block; }
     #status {
       position: fixed;
       top: 16px;
@@ -31,98 +21,160 @@
       font-size: 14px;
       z-index: 999;
       pointer-events: none;
-      transition: opacity 0.5s;
       white-space: nowrap;
     }
-    #status.hidden { opacity: 0; }
   </style>
 </head>
 <body>
 
 <div id="status">読み込み中...</div>
+<canvas id="camerafeed"></canvas>
 
-<a-scene
-  xrconfig
-  xrweb
-  renderer="colorManagement: true"
-  vr-mode-ui="enabled: false"
-  loading-screen="enabled: false"
->
+<!-- Three.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<!-- GLTFLoader -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 
-  <a-assets>
-    <a-asset-item id="model" src="./targets/model.glb"></a-asset-item>
-  </a-assets>
-
-  <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
-
-  <a-entity id="ar-object" visible="false">
-    <a-gltf-model
-      src="#model"
-      position="0 0 0"
-      scale="0.1 0.1 0.1"
-    ></a-gltf-model>
-  </a-entity>
-
-</a-scene>
+<!-- 8th Wall エンジン -->
+<script
+  src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js"
+  crossorigin="anonymous"
+  data-preload-chunks="slam">
+</script>
 
 <script>
-  const status = document.getElementById('status')
-  const arObject = document.getElementById('ar-object')
-  let anchored = false
+const status = document.getElementById('status')
+let model = null
+let anchored = false
+let scene, camera, renderer
 
-  const onXrLoaded = () => {
-    fetch('./targets/frame.json')
-      .then(r => r.json())
-      .then(data => {
-        XR8.XrController.configure({
-          imageTargetData: [data],
-        })
+const onXrLoaded = () => {
+  // frame.json を読み込んでからエンジン起動
+  fetch('./targets/frame.json')
+    .then(r => r.json())
+    .then(targetData => {
 
-        const scene = document.querySelector('a-scene')
+      // Three.js シーン初期化
+      scene    = new THREE.Scene()
+      camera   = new THREE.PerspectiveCamera()
+      renderer = new THREE.WebGLRenderer({
+        canvas: document.getElementById('camerafeed'),
+        alpha: true,
+        antialias: true,
+      })
+      renderer.setPixelRatio(window.devicePixelRatio)
+      renderer.setSize(window.innerWidth, window.innerHeight)
 
-        scene.addEventListener('realityready', () => {
-          status.textContent = 'マーカーをカメラに向けてください'
-        })
+      // ライト
+      scene.add(new THREE.AmbientLight(0xffffff, 1.5))
+      const dir = new THREE.DirectionalLight(0xffffff, 1)
+      dir.position.set(1, 2, 1)
+      scene.add(dir)
 
-        scene.addEventListener('realityerror', (e) => {
-          status.textContent = 'エラー: カメラを確認してください'
-          console.error('reality error', e)
-        })
+      // GLTFモデル読み込み
+      const loader = new THREE.GLTFLoader()
+      loader.load('./targets/model.glb', gltf => {
+        model = gltf.scene
+        model.scale.set(0.1, 0.1, 0.1)
+        model.visible = false
+        scene.add(model)
+      })
 
-        scene.addEventListener('xrimagefound', onImageFound)
-        scene.addEventListener('xrimageupdated', onImageFound)
-
-        scene.addEventListener('xrimagelost', () => {
-          if (anchored) {
-            status.textContent = 'マーカーなしで空間に固定中'
-            status.classList.remove('hidden')
-            setTimeout(() => status.classList.add('hidden'), 2000)
+      // カメラパイプラインモジュール
+      const myModule = {
+        name: 'myARModule',
+        onStart: ({ canvas }) => {
+          XR8.XrController.updateCameraProjectionMatrix({
+            origin: { x: 0, y: 0, z: 0 },
+            facing: { x: 0, y: 0, z: -1, w: 1 },
+          })
+        },
+        onUpdate: ({ processCpuResult }) => {
+          const realitySource = processCpuResult.reality
+          if (!realitySource) return
+          const { rotation, position, intrinsics } = realitySource
+          // カメラ姿勢を更新
+          if (rotation) camera.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w)
+          if (position) camera.position.set(position.x, position.y, position.z)
+          if (intrinsics) {
+            const proj = intrinsics
+            camera.projectionMatrix.fromArray(proj)
+            camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert()
           }
-        })
+        },
+        onRender: () => {
+          renderer.clearDepth()
+          renderer.render(scene, camera)
+        },
+        listeners: [
+          {
+            event: 'reality.imagefound',
+            process: ({ detail }) => onImageEvent(detail),
+          },
+          {
+            event: 'reality.imageupdated',
+            process: ({ detail }) => onImageEvent(detail),
+          },
+          {
+            event: 'reality.imagelost',
+            process: () => onImageLost(),
+          },
+        ],
+      }
+
+      XR8.XrController.configure({
+        imageTargetData: [targetData],
       })
-      .catch(e => {
-        console.error('frame.json 読み込み失敗', e)
-        status.textContent = 'マーカーファイルの読み込みに失敗しました'
+
+      XR8.addCameraPipelineModules([
+        XR8.GlTextureRenderer.pipelineModule(),
+        XR8.Threejs.pipelineModule(),
+        XR8.XrController.pipelineModule(),
+        XRExtras.FullWindowCanvas.pipelineModule(),
+        XRExtras.Loading.pipelineModule(),
+        XRExtras.RuntimeError.pipelineModule(),
+        myModule,
+      ])
+
+      XR8.run({
+        canvas: document.getElementById('camerafeed'),
+        allowedDevices: XR8.XrConfig.device().ANY,
       })
+
+      status.textContent = 'カメラを起動中...'
+    })
+    .catch(e => {
+      console.error('frame.json 読み込み失敗', e)
+      status.textContent = 'マーカーファイルの読み込みに失敗'
+    })
+}
+
+const onImageEvent = (detail) => {
+  if (!model) return
+  model.position.copy(detail.position)
+  model.quaternion.copy(detail.rotation)
+  const s = detail.scale * 0.1
+  model.scale.set(s, s, s)
+  model.visible = true
+
+  if (!anchored) {
+    anchored = true
+    status.textContent = '3D固定しました（マーカーを外してもOK）'
+    setTimeout(() => { status.style.opacity = 0 }, 3000)
   }
+}
 
-  const onImageFound = ({ detail }) => {
-    const obj = arObject.object3D
-    obj.position.copy(detail.position)
-    obj.quaternion.copy(detail.rotation)
-    obj.scale.set(detail.scale, detail.scale, detail.scale)
-    arObject.setAttribute('visible', true)
-
-    if (!anchored) {
-      anchored = true
-      status.textContent = '3D固定しました（マーカーを外してもOK）'
-      setTimeout(() => status.classList.add('hidden'), 3000)
-    }
+const onImageLost = () => {
+  if (anchored) {
+    status.textContent = 'マーカーなしで空間に固定中'
+    status.style.opacity = 1
+    setTimeout(() => { status.style.opacity = 0 }, 2000)
   }
+}
 
-  window.XR8
-    ? onXrLoaded()
-    : window.addEventListener('xrloaded', onXrLoaded)
+window.XR8
+  ? onXrLoaded()
+  : window.addEventListener('xrloaded', onXrLoaded)
 </script>
 
 </body>
