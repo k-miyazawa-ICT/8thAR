@@ -5,40 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AR マーカー 3D モデル</title>
 
-  <!--
-  ============================================================
-  【セットアップ手順】
-
-  1. このHTMLファイルをGitHubリポジトリにアップロード
-
-  2. マーカー画像からターゲットファイルを生成
-     - Node.js をインストール（https://nodejs.org）
-     - コマンド実行：
-       npx @8thwall/image-target-cli process ./your-image.jpg
-     - 生成された my-target.xtarget を targets/ フォルダに入れてGitHubにアップロード
-
-  3. GitHub Pages を有効にする
-     リポジトリの Settings → Pages → Branch: main → Save
-
-  4. iPhoneのSafariで以下にアクセス
-     https://ユーザー名.github.io/リポジトリ名/ar-marker-3d.html
-  ============================================================
-  -->
-
-  <!-- 8th Wall エンジン（CDNから直接読み込み・ダウンロード不要） -->
+  <!-- 8th Wall エンジン（CDNから直接読み込み） -->
   <script async
     src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js"
     crossorigin="anonymous"
     data-preload-chunks="slam">
   </script>
 
-  <!-- A-Frame (8-Frame) -->
+  <!-- A-Frame -->
   <script src="https://cdn.jsdelivr.net/npm/aframe@1.4.2/dist/aframe.min.js"></script>
 
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { overflow: hidden; }
-
     #status {
       position: fixed;
       top: 16px;
@@ -53,114 +32,99 @@
       z-index: 999;
       pointer-events: none;
       transition: opacity 0.5s;
+      white-space: nowrap;
     }
     #status.hidden { opacity: 0; }
   </style>
 </head>
 <body>
 
-<div id="status">マーカーをカメラに向けてください</div>
+<div id="status">読み込み中...</div>
 
 <a-scene
   xrconfig
-  xrweb="enableWorldTracking: true; imageTargets: targets/frame.json"
+  xrweb
   renderer="colorManagement: true"
   vr-mode-ui="enabled: false"
   loading-screen="enabled: false"
 >
 
   <a-assets>
-    <!--
-      イメージターゲットの定義
-      name は image-target-cli で生成した .xtarget のファイル名（拡張子なし）に合わせる
-    -->
-    <xrextras-named-image-target name="frame"></xrextras-named-image-target>
+    <a-asset-item id="model" src="./targets/model.glb"></a-asset-item>
   </a-assets>
 
   <!-- カメラ -->
   <a-camera
-    id="main-camera"
     position="0 0 0"
     look-controls="enabled: false"
   ></a-camera>
 
-  <a-entity id="ar-object" ar-anchor="targetName: frame" visible="false">
-
-    <!-- model.glb を表示 -->
+  <!-- 3Dオブジェクト（マーカー消えても位置維持） -->
+  <a-entity id="ar-object" visible="false">
     <a-gltf-model
-      src="./targets/model.glb"
+      src="#model"
       position="0 0 0"
       scale="0.1 0.1 0.1"
     ></a-gltf-model>
-
   </a-entity>
 
 </a-scene>
 
 <script>
-  /*
-   * ar-anchor コンポーネント
-   *
-   * 動作：
-   *   1. マーカーを検出（xrimagefound）
-   *      → SLAMワールド座標にエンティティを配置して visible = true
-   *   2. マーカー追跡中（xrimageupdated）
-   *      → 位置・回転を更新
-   *   3. マーカーが消える（xrimagelost）
-   *      → 何もしない（SLAMが空間位置を保持し続けるので自動で維持される）
-   *   4. マーカーが再び映る（xrimagefound）
-   *      → 正確な位置に再スナップ
-   */
-  AFRAME.registerComponent('ar-anchor', {
-    schema: {
-      targetName: { type: 'string', default: '' }
-    },
+  const status = document.getElementById('status')
+  const arObject = document.getElementById('ar-object')
+  let anchored = false
 
-    init() {
-      const el       = this.el
-      const name     = this.data.targetName
-      const status   = document.getElementById('status')
-      const obj      = el.object3D
+  const onXrLoaded = () => {
+    // イメージターゲット名を指定（frame.jsonのnameフィールドと一致させる）
+    XR8.XrController.configure({
+      imageTargets: ['frame'],
+    })
 
-      // SLAMワールド座標でエンティティを管理するフラグ
-      let anchored = false
+    const scene = document.querySelector('a-scene')
 
-      // マーカー発見 or 更新（共通処理）
-      const onFound = ({ detail }) => {
-        if (detail.name !== name) return
+    // カメラ起動成功
+    scene.addEventListener('realityready', () => {
+      status.textContent = 'マーカーをカメラに向けてください'
+    })
 
-        // detail.position / detail.rotation はSLAMワールド座標
-        obj.position.copy(detail.position)
-        obj.quaternion.copy(detail.rotation)
-        obj.scale.set(detail.scale, detail.scale, detail.scale)
-        el.setAttribute('visible', true)
+    // エラー
+    scene.addEventListener('realityerror', (e) => {
+      status.textContent = 'エラー: カメラを確認してください'
+      console.error('reality error', e)
+    })
 
-        if (!anchored) {
-          anchored = true
-          status.textContent = '3D固定しました（マーカーを外してもOK）'
-          // 3秒後にステータスを隠す
-          setTimeout(() => status.classList.add('hidden'), 3000)
-        }
-      }
+    // マーカー発見・更新
+    scene.addEventListener('xrimagefound', onImageFound)
+    scene.addEventListener('xrimageupdated', onImageFound)
 
-      // マーカー消失
-      const onLost = ({ detail }) => {
-        if (detail.name !== name) return
-        /*
-         * ここでは visible を変えない。
-         * SLAMがカメラの動きを追跡し続けるため、
-         * エンティティはワールド座標の正しい位置に留まる。
-         */
+    // マーカー消失 → 何もしない（SLAMが位置を維持し続ける）
+    scene.addEventListener('xrimagelost', () => {
+      if (anchored) {
         status.textContent = 'マーカーなしで空間に固定中'
         status.classList.remove('hidden')
         setTimeout(() => status.classList.add('hidden'), 2000)
       }
+    })
+  }
 
-      el.sceneEl.addEventListener('xrimagefound',   onFound)
-      el.sceneEl.addEventListener('xrimageupdated', onFound)
-      el.sceneEl.addEventListener('xrimagelost',    onLost)
+  const onImageFound = ({ detail }) => {
+    const obj = arObject.object3D
+    obj.position.copy(detail.position)
+    obj.quaternion.copy(detail.rotation)
+    obj.scale.set(detail.scale, detail.scale, detail.scale)
+    arObject.setAttribute('visible', true)
+
+    if (!anchored) {
+      anchored = true
+      status.textContent = '3D固定しました（マーカーを外してもOK）'
+      setTimeout(() => status.classList.add('hidden'), 3000)
     }
-  })
+  }
+
+  window.XR8
+    ? onXrLoaded()
+    : window.addEventListener('xrloaded', onXrLoaded)
 </script>
 
 </body>
