@@ -1,5 +1,5 @@
 {
-  "imagePath": "frame_luminance.png",
+  "imagePath": "https://k-miyazawa-ict.github.io/8thAR/targets/frame_luminance.png",
   "metadata": null,
   "name": "frame",
   "type": "PLANAR",
@@ -13,10 +13,10 @@
     "originalHeight": 640
   },
   "resources": {
-    "originalImage": "frame_original.png",
-    "croppedImage": "frame_cropped.png",
-    "thumbnailImage": "frame_thumbnail.png",
-    "luminanceImage": "frame_luminance.png"
+    "originalImage": "https://k-miyazawa-ict.github.io/8thAR/targets/frame_original.png",
+    "croppedImage": "https://k-miyazawa-ict.github.io/8thAR/targets/frame_cropped.png",
+    "thumbnailImage": "https://k-miyazawa-ict.github.io/8thAR/targets/frame_thumbnail.png",
+    "luminanceImage": "https://k-miyazawa-ict.github.io/8thAR/targets/frame_luminance.png"
   },
   "created": 1776825239198,
   "updated": 1776825239198
