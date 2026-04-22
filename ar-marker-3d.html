@@ -53,13 +53,8 @@
     <a-asset-item id="model" src="./targets/model.glb"></a-asset-item>
   </a-assets>
 
-  <!-- カメラ -->
-  <a-camera
-    position="0 0 0"
-    look-controls="enabled: false"
-  ></a-camera>
+  <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-  <!-- 3Dオブジェクト（マーカー消えても位置維持） -->
   <a-entity id="ar-object" visible="false">
     <a-gltf-model
       src="#model"
@@ -76,36 +71,40 @@
   let anchored = false
 
   const onXrLoaded = () => {
-    // イメージターゲット名を指定（frame.jsonのnameフィールドと一致させる）
-    XR8.XrController.configure({
-      imageTargets: ['frame'],
-    })
+    // frame.json を取得して imageTargetData に渡す
+    fetch('./targets/frame.json')
+      .then(r => r.json())
+      .then(data => {
+        XR8.XrController.configure({
+          imageTargetData: [data],
+        })
 
-    const scene = document.querySelector('a-scene')
+        const scene = document.querySelector('a-scene')
 
-    // カメラ起動成功
-    scene.addEventListener('realityready', () => {
-      status.textContent = 'マーカーをカメラに向けてください'
-    })
+        scene.addEventListener('realityready', () => {
+          status.textContent = 'マーカーをカメラに向けてください'
+        })
 
-    // エラー
-    scene.addEventListener('realityerror', (e) => {
-      status.textContent = 'エラー: カメラを確認してください'
-      console.error('reality error', e)
-    })
+        scene.addEventListener('realityerror', (e) => {
+          status.textContent = 'エラー: カメラを確認してください'
+          console.error('reality error', e)
+        })
 
-    // マーカー発見・更新
-    scene.addEventListener('xrimagefound', onImageFound)
-    scene.addEventListener('xrimageupdated', onImageFound)
+        scene.addEventListener('xrimagefound', onImageFound)
+        scene.addEventListener('xrimageupdated', onImageFound)
 
-    // マーカー消失 → 何もしない（SLAMが位置を維持し続ける）
-    scene.addEventListener('xrimagelost', () => {
-      if (anchored) {
-        status.textContent = 'マーカーなしで空間に固定中'
-        status.classList.remove('hidden')
-        setTimeout(() => status.classList.add('hidden'), 2000)
-      }
-    })
+        scene.addEventListener('xrimagelost', () => {
+          if (anchored) {
+            status.textContent = 'マーカーなしで空間に固定中'
+            status.classList.remove('hidden')
+            setTimeout(() => status.classList.add('hidden'), 2000)
+          }
+        })
+      })
+      .catch(e => {
+        console.error('frame.json 読み込み失敗', e)
+        status.textContent = 'マーカーファイルの読み込みに失敗しました'
+      })
   }
 
   const onImageFound = ({ detail }) => {
