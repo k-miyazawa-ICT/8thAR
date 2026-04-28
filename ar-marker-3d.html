@@ -71,6 +71,9 @@ const log = (...args) => {
 let model = null
 let anchored = false
 let threeScene, threeCamera, threeRenderer
+let samples = []
+const REQUIRED_SAMPLES = 30
+const STABLE_DISTANCE = 0.005 // 5mm以内なら安定と判定
 
 const onXrLoaded = () => {
   log('XR8読み込み完了')
@@ -162,14 +165,72 @@ const onXrLoaded = () => {
 
 const onImageEvent = (detail) => {
   if (!model) return
-  model.position.copy(detail.position)
-  model.quaternion.copy(detail.rotation)
-  model.visible = true
-  if (!anchored) {
-    anchored = true
-    status.textContent = '3D固定しました！'
-    setTimeout(() => { status.style.opacity = '0' }, 3000)
+
+  // 固定後は imageupdated を無視
+  if (anchored) return
+
+  const pos = new THREE.Vector3(
+    detail.position.x,
+    detail.position.y,
+    detail.position.z
+  )
+
+  const rot = new THREE.Quaternion(
+    detail.rotation.x,
+    detail.rotation.y,
+    detail.rotation.z,
+    detail.rotation.w
+  )
+
+  samples.push({ position: pos, rotation: rot })
+
+  if (samples.length > REQUIRED_SAMPLES) {
+    samples.shift()
   }
+
+  // まずは追従表示
+  model.position.copy(pos)
+  model.quaternion.copy(rot)
+  model.visible = true
+
+  status.textContent = `安定待ち... ${samples.length}/${REQUIRED_SAMPLES}`
+
+  if (samples.length < REQUIRED_SAMPLES) return
+
+  // 位置の平均を計算
+  const avgPos = new THREE.Vector3()
+  samples.forEach(s => avgPos.add(s.position))
+  avgPos.divideScalar(samples.length)
+
+  // ブレ量を確認
+  let maxDistance = 0
+  samples.forEach(s => {
+    const d = s.position.distanceTo(avgPos)
+    if (d > maxDistance) maxDistance = d
+  })
+
+  // まだブレているなら固定しない
+  if (maxDistance > STABLE_DISTANCE) {
+    status.textContent = `安定待ち... ブレ ${(maxDistance * 1000).toFixed(1)}mm`
+    return
+  }
+
+  // 回転は徐々に平均化
+  const avgRot = samples[0].rotation.clone()
+  for (let i = 1; i < samples.length; i++) {
+    avgRot.slerp(samples[i].rotation, 1 / (i + 1))
+  }
+
+  // 平均位置・平均角度で固定
+  model.position.copy(avgPos)
+  model.quaternion.copy(avgRot)
+  model.visible = true
+
+  anchored = true
+  status.textContent = '3D固定しました！'
+  log('3D固定完了 maxDistance(mm):', (maxDistance * 1000).toFixed(2))
+
+  setTimeout(() => { status.style.opacity = '0' }, 3000)
 }
 
 const onImageLost = () => {
