@@ -103,14 +103,20 @@ const onXrLoaded = () => {
       loader.load('./targets/model.glb',
         gltf => {
           model = gltf.scene
+
+          // SolidWorksのmm → Three.js/ARのm に変換
+          model.scale.set(0.001, 0.001, 0.001)
+
           model.visible = false
+
           const box = new THREE.Box3().setFromObject(model)
           const size = new THREE.Vector3()
           box.getSize(size)
-          log('モデルサイズ:', size.x, size.y, size.z)
+          log('モデルサイズ(m):', size.x, size.y, size.z)
+
           threeScene.add(model)
           log('モデル読み込み完了')
-        },
+        }
         undefined,
         e => log('モデル読み込み失敗:', e.message)
       )
