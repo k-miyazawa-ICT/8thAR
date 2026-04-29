@@ -105,7 +105,7 @@ const onXrLoaded = () => {
           model = gltf.scene
 
           // SolidWorksのmm → Three.js/ARのm に変換
-          model.scale.set(0.001, 0.001, 0.001)
+          model.scale.set(1, 1, 1)
 
           model.visible = false
 
