@@ -105,7 +105,7 @@ const onXrLoaded = () => {
           model = gltf.scene
 
           // SolidWorksのmm → Three.js/ARのm に変換
-          model.scale.set(10.96, 10.96, 10.96)
+          model.scale.set(0.001, 0.001, 0.001)
 
           model.visible = false
 
@@ -150,7 +150,10 @@ const onXrLoaded = () => {
       }
 
       log('XrController設定中...')
-      XR8.XrController.configure({ imageTargetData: [targetData] })
+      XR8.XrController.configure({
+        imageTargetData: [targetData],
+        scale: 'absolute'
+      })
 
       log('パイプライン追加中...')
       XR8.addCameraPipelineModules([
