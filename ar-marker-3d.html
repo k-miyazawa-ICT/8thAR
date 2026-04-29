@@ -72,8 +72,8 @@ let model = null
 let anchored = false
 let threeScene, threeCamera, threeRenderer
 let samples = []
-const REQUIRED_SAMPLES = 30
-const STABLE_DISTANCE = 0.005 // 5mm以内なら安定と判定
+const REQUIRED_SAMPLES = 15
+const STABLE_DISTANCE = 0.02 // 5mm以内なら安定と判定
 
 const onXrLoaded = () => {
   log('XR8読み込み完了')
@@ -105,7 +105,7 @@ const onXrLoaded = () => {
           model = gltf.scene
 
           // SolidWorksのmm → Three.js/ARのm に変換
-          model.scale.set(0.001, 0.001, 0.001)
+          model.scale.set(1, 1, 1)
 
           model.visible = false
 
